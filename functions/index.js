@@ -1,14 +1,13 @@
 // // Create and Deploy Your First Cloud Functions
 // // https://firebase.google.com/docs/functions/write-firebase-functions
+// response codes adn errors:
+// https://developer.twitter.com/en/support/twitter-api/error-troubleshooting
 
 //import request to trigger the tweet at certain intervals (scheduled function call)
 //cron job
 // const request = require('request');
 
-// exports.helloWorld = functions.https.onRequest((request, response) => {
-//   functions.logger.info("Hello logs!", {structuredData: true});
-//   response.send("Hello from Firebase!");
-// });
+
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 admin.initializeApp();
@@ -88,40 +87,31 @@ exports.tweet = functions.https.onRequest(async (request,response)=>{
 
     await dbRef.set({accessToken,refreshToken:newRefreshToken});
 
-    const nextTweet = "hello world"
+    //API SEARCH TWEET https://twittercommunity.com/t/from-a-query-resending-to-obtain-a-oembed-twitter-api-v2-electron-nodejs/164231
+    // API SEARCH TWEET https://developer.twitter.com/en/docs/twitter-api/tweets/search/api-reference/get-tweets-search-recent
+    // BUILD QUERY - https://developer.twitter.com/en/docs/twitter-api/tweets/search/integrate/build-a-query#examples
+    var res =  await refreshedClient.v2.search("in_reply_to_tweet_id:1603018284282138634 to:m1guelpf")
 
-    // const { data } = await refreshedClient.v2.tweet(nextTweet);
-    // https://developer.twitter.com/en/docs/twitter-api/tweets/lookup/api-reference/get-tweets#tab1
-    const { data } = await refreshedClient.v2.tweets("1503335964067909632",
-        {
-            //A comma separated list of fields to expand.
-            expansions: ["author_id"],
+    list_of_tweets = []
+    if (res.meta.next_token == undefined){
+        response.send(res.data);
+    }else{
+        // using the next token for polling 
+        //https://developer.twitter.com/en/docs/twitter-api/tweets/search/integrate/paginate
+        while (res.meta.next_token !== undefined) {
+            //append data in res to list of tweets
+            list_of_tweets.push(res.data)
+            res = await refreshedClient.v2.get('tweets/search/recent', 
+                { 
+                    query: "in_reply_to_tweet_id:1603018284282138634 to:m1guelpf", 
+                    max_results: 10,
+                    next_token: res.meta.next_token,    
+                });
 
-            //A comma separated list of User fields to display.
-            "user.fields": ["created_at", "description", "name","username"],
+        }
+        response.send(list_of_tweets);
+    }
 
-            //A comma separated list of Tweet fields to display.
-            "tweet.fields": ["created_at", "lang", "conversation_id"],
-        })
-    response.send(data);
+    response.send("Completed")
 
 });
-
-
-    // try {
-    //   const lookupTweetById = await twitterClient.tweets.findTweetById(
-    //     //The ID of the Tweet
-    //     "1460323737035677698",
-    //     {
-    //       //A comma separated list of fields to expand
-    //       expansions: ["attachments.media_keys"],
-  
-    //       //A comma separated list of Media fields to display
-    //       "media.fields": ["duration_ms", "type"],
-    //     }
-    //   );
-    // }
-
-
-
-
