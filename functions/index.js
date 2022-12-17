@@ -157,45 +157,40 @@ exports.poll = functions.https.onRequest(async (request,response)=>{
 });
 
 //firestore trigger for calling AI APIS when new data is added to db 
-exports.callAPI = functions.firestore.document('/tweets/{id}')
+// https://firebase.google.com/docs/functions/firestore-events
+exports.callAPI = functions.firestore.document('tweets/{id}')
 .onCreate(async (snap,context)=>{
 
+    const newValue = snap.data();
+    // access a particular field as you would any JS property
+    const promt = newValue.text;
+
+    // perform desired operations ...
     functions.logger.info('New deata added to db');
     functions.logger.info(snap.data());
 
-    // //get all data from collection in database
-    // const dbSnapshot = await dbRef2.get();
-    // tweets = []
-
-    // //map through results and call api with the text promts
-    // dbSnapshot.docs.map(doc => 
-    //     {
-    //     //call api with doc.data().text
-    //     tweets.push(doc.data())
-    //     })
-
-
-
-
-    // if (dbSnapshot !== undefined){
-    //     response.send(tweets);
-    // } else{
-    //     response.send([]);
-    // }
-    
+  
 
 });
 
 
 exports.test = functions.https.onRequest(async (request,response)=>{
-
+    
+    // add data to db 
+    dbRef2.add(
+        {
+            id: "123456",
+            text: "moving in the wind at 20000mph",
+            replied: false,
+        }
+    )
     response.send({msg:"For testing purposes"});
 
 
 });
 
 //todo:
-//set up trigger event on adding data to the db 
+// set up emulators to allow trigger event work
 //validate data meets criteria - user is following us and other stuff
 
 // cron job - https://stackoverflow.com/questions/54323163/how-to-trigger-function-when-date-stored-in-firestore-database-is-todays-date

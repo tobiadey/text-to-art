@@ -3,17 +3,6 @@
 //cron job
 // const request = require('request');
 
-const citiesRef = db.collection('cities');
-const snapshot = await citiesRef.where('capital', '==', true).get();
-if (snapshot.empty) {
-  console.log('No matching documents.');
-  return;
-}  
-
-snapshot.forEach(doc => {
-  console.log(doc.id, '=>', doc.data());
-});index.js
-
 // ----1
 // conversation_id:1334987486343299072
 
@@ -44,7 +33,27 @@ snapshot.forEach(doc => {
 
 
 
-// ----4
+// ----4 - get all data from db collection
+  // //get all data from collection in database
+    // const dbSnapshot = await dbRef2.get();
+    // tweets = []
+
+    // //map through results and call api with the text promts
+    // dbSnapshot.docs.map(doc => 
+    //     {
+    //     //call api with doc.data().text
+    //     tweets.push(doc.data())
+    //     })
+
+
+
+
+    // if (dbSnapshot !== undefined){
+    //     response.send(tweets);
+    // } else{
+    //     response.send([]);
+    // }
+    
  
 
 // ----5
