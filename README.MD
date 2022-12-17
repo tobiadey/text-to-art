@@ -1,4 +1,14 @@
-# text-to-art
+### Explanation
+
+
+This is a bot that constatly checks for replies to a main tweet and replies to these replies with a result of what the their replied text would generate in both SD & Dallee AI models.
+
+**Note to self** 
+- Explain this better.
+
+
+
+---
 
 ### Structure
 
@@ -6,7 +16,7 @@
 
 - [ Reply tweet 1] → [fn] → [image: dalle2 & SD2]
 - [ Reply tweet 2] → [fn] → [image: dalle2 & SD2]
-
+---
 Implementation of [Fn]
 
 - Success criteria
@@ -17,10 +27,8 @@ Implementation of [Fn]
     
 
 Idempotency 
-
-- Twitter webhook to receive info on new tweets replies
 - Poll every x mins and store unique reply id in the db
-    - [cronJob]*<x mins> → [fn1]
+    - [cronJob]* (x mins) → [fn1]
     - [fn1: get unique replies and save to db]
         - → [Twitter: get replies to a tweet]
         - → [validation]
@@ -31,7 +39,7 @@ Idempotency
             - text as prompt
             - openAiUrl
             - sdUrl
-        - → [Callback: listen for creation of new record to the db] → <async>[fn2]
+        - → [Callback: listen for creation of new record to the db] → (async)[fn2]
     - [fn2: handle getting image from prompt]
         - → [openAi: call open ai api]
             - prompt
@@ -56,10 +64,8 @@ Idempotency
 - send image urls to the callback url
 
 
-
-Important comands:
-$ firebase serve 
-When working on cron job:
-$ firebase init emulators
-$ firebase emulators:start
+---
+- Important comands:
+    - $ firebase serve 
+    - $ firebase emulators:start
 

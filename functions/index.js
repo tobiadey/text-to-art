@@ -11,7 +11,7 @@ admin.initializeApp();
 require('dotenv').config()
 
 
-// reference to document in firestore db
+//reference to document in firestore db
 const dbRef = admin.firestore().doc(process.env.DB_REFERENCE); // rename tokenRef
 const dbRef2 = admin.firestore().collection(process.env.DB_REFERENCE2); //rename tweetsRef
 const callbackURL = process.env.CALLBACK_URL
@@ -73,7 +73,6 @@ exports.callback = functions.https.onRequest(async (request,response) => {
 });
 
 // STEP 3 - Refresh tokens, poll tweets and add to db if not exisit using tweet id
-
 // add invididual tweet to db just like how its added to list of tweets
 // change structure to only store tweet id and data 
 // before adding check if tweet id exists 
@@ -156,7 +155,8 @@ exports.poll = functions.https.onRequest(async (request,response)=>{
     response.send({msg: "Data polled and added to DB"});
 });
 
-//firestore trigger for calling AI APIS when new data is added to db 
+
+// STEP 4 - Trigger event (on addition to DB)- calling AI APIS with promt data 
 // https://firebase.google.com/docs/functions/firestore-events
 exports.callAPI = functions.firestore.document('tweets/{id}')
 .onCreate(async (snap,context)=>{
@@ -169,11 +169,17 @@ exports.callAPI = functions.firestore.document('tweets/{id}')
     functions.logger.info('New data added to db');
     functions.logger.info(snap.data());
 
-  
-
 });
 
 
+
+
+// STEP 5 - Callback URL for AI models (SD) - store image url in db 
+// STEP 6 - Callback URL for AI models (DALLEE-2) - store image url in db 
+// STEP 7 - Check both tweets have image urls then tweet
+
+
+// STEP * - Testing 
 exports.test = functions.https.onRequest(async (request,response)=>{
     
     // add data to db 
@@ -190,6 +196,7 @@ exports.test = functions.https.onRequest(async (request,response)=>{
 });
 
 //todo:
+// update db data to include openAiUrl & sdUrl
 // in the firbase trigger send requests/task to a SQS equvalent to allow for failed requests to repeat
 // SQS/ Pub Sub/ Cloud Task - https://www.google.com/search?q=google+task+queue+vs+pubsub&oq=google+job+queue&aqs=chrome.2.69i57j0i22i30l3j0i15i22i30j0i390l2j69i64.7484j0j7&sourceid=chrome&ie=UTF-8
 // store the image using tweet id:name somewhere when done - endpoinnt for AI apis
