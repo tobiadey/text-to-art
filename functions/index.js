@@ -166,7 +166,7 @@ exports.callAPI = functions.firestore.document('tweets/{id}')
     const promt = newValue.text;
 
     // perform desired operations ...
-    functions.logger.info('New deata added to db');
+    functions.logger.info('New data added to db');
     functions.logger.info(snap.data());
 
   
@@ -190,7 +190,9 @@ exports.test = functions.https.onRequest(async (request,response)=>{
 });
 
 //todo:
-// set up emulators to allow trigger event work
+// in the firbase trigger send requests/task to a SQS equvalent to allow for failed requests to repeat
+// SQS/ Pub Sub/ Cloud Task - https://www.google.com/search?q=google+task+queue+vs+pubsub&oq=google+job+queue&aqs=chrome.2.69i57j0i22i30l3j0i15i22i30j0i390l2j69i64.7484j0j7&sourceid=chrome&ie=UTF-8
+// store the image using tweet id:name somewhere when done - endpoinnt for AI apis
 //validate data meets criteria - user is following us and other stuff
 
 // cron job - https://stackoverflow.com/questions/54323163/how-to-trigger-function-when-date-stored-in-firestore-database-is-todays-date
