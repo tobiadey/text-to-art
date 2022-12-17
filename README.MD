@@ -54,3 +54,12 @@ Idempotency
 - respond with request recieved
 - when task (image generation) is complete
 - send image urls to the callback url
+
+
+
+Important comands:
+$ firebase serve 
+When working on cron job:
+$ firebase init emulators
+$ firebase emulators:start
+
