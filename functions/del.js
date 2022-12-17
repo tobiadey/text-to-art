@@ -1,4 +1,18 @@
 
+//import request to trigger the tweet at certain intervals (scheduled function call)
+//cron job
+// const request = require('request');
+
+const citiesRef = db.collection('cities');
+const snapshot = await citiesRef.where('capital', '==', true).get();
+if (snapshot.empty) {
+  console.log('No matching documents.');
+  return;
+}  
+
+snapshot.forEach(doc => {
+  console.log(doc.id, '=>', doc.data());
+});index.js
 
 // ----1
 // conversation_id:1334987486343299072

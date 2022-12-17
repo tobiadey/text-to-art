@@ -1,15 +1,10 @@
-// // Create and Deploy Your First Cloud Functions
-// // https://firebase.google.com/docs/functions/write-firebase-functions
-// response codes adn errors:
-// https://developer.twitter.com/en/support/twitter-api/error-troubleshooting
-// API REFERENCE INDEX 
-// https://developer.twitter.com/en/docs/api-reference-index
-
-//import request to trigger the tweet at certain intervals (scheduled function call)
-//cron job
-// const request = require('request');
-
-
+/**
+ * AUTHOR - TOBI
+ * Create and Deploy Your First Cloud Functions - https://firebase.google.com/docs/functions/write-firebase-functions
+ * Twitter API Response codes & Errors - https://developer.twitter.com/en/support/twitter-api/error-troubleshooting
+ * API REFERENCE INDEX - https://developer.twitter.com/en/docs/api-reference-index
+ * 
+ */
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 admin.initializeApp();
@@ -17,8 +12,8 @@ require('dotenv').config()
 
 
 // reference to document in firestore db
-const dbRef = admin.firestore().doc(process.env.DB_REFERENCE);
-const dbRef2 = admin.firestore().collection(process.env.DB_REFERENCE2);
+const dbRef = admin.firestore().doc(process.env.DB_REFERENCE); // rename tokenRef
+const dbRef2 = admin.firestore().collection(process.env.DB_REFERENCE2); //rename tweetsRef
 const callbackURL = process.env.CALLBACK_URL
 
 //init twitter api (using OAuth 2.0)
@@ -77,13 +72,15 @@ exports.callback = functions.https.onRequest(async (request,response) => {
 
 });
 
-// STEP 3 - Refresh tokens, query tweets and add to db if not exisit using tweet id
+// STEP 3 - Refresh tokens, poll tweets and add to db if not exisit using tweet id
 
 // add invididual tweet to db just like how its added to list of tweets
 // change structure to only store tweet id and data 
 // before adding check if tweet id exists 
 // do i need list of tweets or maybe i do and i can change it to a hashmap/hashset 
-exports.tweet = functions.https.onRequest(async (request,response)=>{
+exports.poll = functions.https.onRequest(async (request,response)=>{
+
+    //refresh token to call twitter api with cron job 
     const{refreshToken} = (await dbRef.get()).data();
 
     const{
@@ -94,6 +91,8 @@ exports.tweet = functions.https.onRequest(async (request,response)=>{
 
     await dbRef.set({accessToken,refreshToken:newRefreshToken});
 
+
+    //search for tweets that meet certain criteria
     //API SEARCH TWEET https://twittercommunity.com/t/from-a-query-resending-to-obtain-a-oembed-twitter-api-v2-electron-nodejs/164231
     // API SEARCH TWEET https://developer.twitter.com/en/docs/twitter-api/tweets/search/api-reference/get-tweets-search-recent
     // BUILD QUERY - https://developer.twitter.com/en/docs/twitter-api/tweets/search/integrate/build-a-query#examples
@@ -104,34 +103,47 @@ exports.tweet = functions.https.onRequest(async (request,response)=>{
             max_results: 10, 
         });
 
-
-    list_of_tweets = [] // might turn this into a dictionary
     if (res.meta.next_token == undefined){
-        functions.logger.info("NExt token is undefiend");
-        res.data.map(item => {
-            list_of_tweets.push(item)
-        })
-    }else{
-        functions.logger.info("NExt token is not undefiend");
-        // using the next token for polling 
-        //https://developer.twitter.com/en/docs/twitter-api/tweets/search/integrate/paginate
-        while (res.meta.next_token !== undefined) {
-            //append data in res to list of tweets
-            res.data.map(item => {
-
-                const data = {
+        functions.logger.info("next token is undefiend");
+        res.data.map(async item => {
+            // check if tweet id already exists in db
+            const snapshot = await dbRef2.where('id', '==', item.id).get();
+            functions.logger.info('Taking snapshot.');
+            if (snapshot.empty) {
+            functions.logger.info('No matching documents.');
+            // push to db
+            dbRef2.add(
+                {
                     id: item.id,
                     text: item.text,
                     replied: false,
-                  };
-                
-                list_of_tweets.push(data)
-                // dbRef2.add({data});
-                // if (item.id not in firestore documents){
-                //     dbRef2.add({daya});
-                // }
-                
+                }
+            )
+            } 
+        })
+    }else{
+        functions.logger.info("next token is defiend");
+        // using the next token for polling - https://developer.twitter.com/en/docs/twitter-api/tweets/search/integrate/paginate
+        while (res.meta.next_token !== undefined) {
+            //add tweets from API result to database (check if they already exists in db before adding)
+            res.data.map(async item => {
+
+                // check if tweet id already exists in db
+                const snapshot = await dbRef2.where('id', '==', item.id).get();
+                functions.logger.info('Taking snapshot.');
+                if (snapshot.empty) {
+                functions.logger.info('No matching documents.');
+                // push to db
+                dbRef2.add(
+                    {
+                        id: item.id,
+                        text: item.text,
+                        replied: false,
+                    }
+                )
+                } 
             })
+            // get the next 10 tweets using the next token (still insilde while loop)
             res = await refreshedClient.v2.get('tweets/search/recent', 
                 { 
                     query: "in_reply_to_tweet_id:1603018284282138634 to:m1guelpf", 
@@ -141,30 +153,49 @@ exports.tweet = functions.https.onRequest(async (request,response)=>{
 
         }
     }
-
-    response.send(list_of_tweets);
+    response.send({msg: "Data polled and added to DB"});
 });
 
+//firestore trigger for calling AI APIS when new data is added to db 
+exports.callAPI = functions.firestore.document('/tweets/{id}')
+.onCreate(async (snap,context)=>{
 
-exports.callAPI = functions.https.onRequest(async (request,response)=>{
-    const dbSnapshot = await dbRef2.get();
-    tweets = []
+    functions.logger.info('New deata added to db');
+    functions.logger.info(snap.data());
+
+    // //get all data from collection in database
+    // const dbSnapshot = await dbRef2.get();
+    // tweets = []
+
+    // //map through results and call api with the text promts
+    // dbSnapshot.docs.map(doc => 
+    //     {
+    //     //call api with doc.data().text
+    //     tweets.push(doc.data())
+    //     })
 
 
-    dbSnapshot.docs.map(doc => 
-        {
-        //call api with doc.data().text
-        tweets.push(doc.data())
-        })
 
 
-
-
-    if (dbSnapshot !== undefined){
-        response.send(tweets);
-    } else{
-        response.send([]);
-    }
+    // if (dbSnapshot !== undefined){
+    //     response.send(tweets);
+    // } else{
+    //     response.send([]);
+    // }
     
 
 });
+
+
+exports.test = functions.https.onRequest(async (request,response)=>{
+
+    response.send({msg:"For testing purposes"});
+
+
+});
+
+//todo:
+//set up trigger event on adding data to the db 
+//validate data meets criteria - user is following us and other stuff
+
+// cron job - https://stackoverflow.com/questions/54323163/how-to-trigger-function-when-date-stored-in-firestore-database-is-todays-date
