@@ -8,6 +8,9 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "dependencies": {
+    "@google-cloud/pubsub": "^3.2.1",
+    "request": "^2.88.2"
+  }
 }
-

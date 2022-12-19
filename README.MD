@@ -68,4 +68,18 @@ Idempotency
 - Important comands:
     - $ firebase serve 
     - $ firebase emulators:start
+    - $ firebase deploy --only functions
+
+---
+
+Notes:
+
+https://www.youtube.com/watch?v=MjEam95VLiI
+Pubsub(publisher subscriber model) - Pub/Sub helps build robust, scalable systems of applications by integrating them asynchronously. Pub/Sub allows for having a retry mechanism when microserves are down. In this case the replicate API when attempting to create the text-to-art images. 
+
+CLoud pub/sub is a fully managed real time messaging service that allows you to send and recieve between independetn applications. 
+
+Using pub/sub within your acrichteture, microservices dont need to know about each other. The only thing needed is they need to pub/sub and recieving the right messages
+
+If any microservce goes down pub/sub stores the message for 7 days/ until the microservice is back online/available.
 
