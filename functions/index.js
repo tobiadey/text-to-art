@@ -156,7 +156,7 @@ exports.poll = functions.https.onRequest(async (request,response)=>{
 });
 
 
-// STEP 4 - Trigger event (on addition to DB)- calling AI APIS with promt data 
+// STEP 4 - Trigger event (on addition to DB)- calling AI APIS with prompt text
 // https://firebase.google.com/docs/functions/firestore-events
 exports.callAPI = functions.firestore.document('tweets/{id}')
 .onCreate(async (snap,context)=>{
@@ -179,7 +179,10 @@ exports.callAPI = functions.firestore.document('tweets/{id}')
 // STEP 7 - Check both tweets have image urls then tweet
 
 
-// STEP * - Testing 
+//Testing 
+
+//create a get all data from db function
+//test
 exports.test = functions.https.onRequest(async (request,response)=>{
     
     // add data to db 
@@ -195,7 +198,10 @@ exports.test = functions.https.onRequest(async (request,response)=>{
 
 });
 
+//
+
 //todo:
+//still need to validate user is following 
 // update db data to include openAiUrl & sdUrl
 // in the firbase trigger send requests/task to a SQS equvalent to allow for failed requests to repeat
 // SQS/ Pub Sub/ Cloud Task - https://www.google.com/search?q=google+task+queue+vs+pubsub&oq=google+job+queue&aqs=chrome.2.69i57j0i22i30l3j0i15i22i30j0i390l2j69i64.7484j0j7&sourceid=chrome&ie=UTF-8

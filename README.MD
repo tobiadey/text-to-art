@@ -23,7 +23,7 @@ Implementation of [Fn]
     - must act on a reply tweet only onces
     - must validate the tweet as a valid prompt
     - must be asynchronous (non-blocking)
-    - must check if the reply user is following soji
+    - must check if the reply user is following
     
 
 Idempotency 
