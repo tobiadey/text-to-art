@@ -17,6 +17,7 @@ admin.initializeApp();
 const dbRef = admin.firestore().doc(process.env.DB_REFERENCE); // rename tokenRef
 const dbRef2 = admin.firestore().collection(process.env.DB_REFERENCE2); //rename tweetsRef
 const callbackURL = process.env.CALLBACK_URL
+// const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN
 
 //init twitter api (using OAuth 2.0)
 const TwitterApi = require("twitter-api-v2").default;
@@ -118,6 +119,8 @@ exports.poll = functions.https.onRequest(async (request,response)=>{
                     id: item.id,
                     text: item.text,
                     replied: false,
+                    openAiUrl: '',
+                    sdUrl: '',
                 }
             )
             } 
@@ -140,6 +143,8 @@ exports.poll = functions.https.onRequest(async (request,response)=>{
                         id: item.id,
                         text: item.text,
                         replied: false,
+                        openAiUrl: '',
+                        sdUrl: '',
                     }
                 )
                 } 
@@ -165,24 +170,32 @@ exports.poll = functions.https.onRequest(async (request,response)=>{
 //function retry mechanism - https://firebase.google.com/docs/functions/retries
 //MUST BE IDEMPOTENT
 // exports.pubsubTriggeredFunction = functions.pubsub.topic('test-topic').onPublish((message, context) => {
-exports.pubsubTriggeredFunction = functions.runWith({failurePolicy: true}).pubsub.topic('test-topic').onPublish((message, context) => {
+exports.pubsubTriggeredFunction = functions.runWith({failurePolicy: true}).pubsub.topic('test-topic').onPublish(async (message, context) => {
     functions.logger.info('Got a pubsub message');
-    const data = message.data ? Buffer.from(message.data, 'base64').toString() : 'ERR'
-    functions.logger.info({ data })
-    functions.logger.info({ context })
+
+    const data = message.data ? await Buffer.from(message.data, 'base64').toString() : 'ERR'
+    if (data == 'ERR'){
+        return null
+    }
+    const tweet_id = message.json.id
+    const promt = message.json.text
 
     // call text-to-art API's
-    const url1 = 'http://localhost:5001/gioconda-363212/us-central1/successCall'
-    const url2 = 'http://localhost:5001/gioconda-363212/us-central1/failedCall'
-    request(url2, function (error, response) {
-        if (error) throw new Error(error);
-        functions.logger.info("error runing the job dawgggf");
-        functions.logger.info(response.body);
-    });
+    functions.logger.info(tweet_id,promt)
+    // process.env.REPLICATE_API_TOKEN
+    const options = {
+        'method': 'POST',
+        'version': '6359a0cab3ca6e4d3320c33d79096161208e9024d174b2311e5a21b6c7e1131c',
+        'input': {
+            'prompt': 'Alice'
+          },
+        'webhook_completed':'',
+        'headers': {
+        }
+    };
 
-    functions.logger.info('Got a pubsub Task Completed');
 
-    return null // returns nothing
+    return null // return nothing
 })
 
 // STEP 4 - Trigger event (on addition to DB)- calling AI APIS with prompt text
@@ -191,11 +204,12 @@ exports.callAPI = functions.firestore.document('tweets/{id}')
 .onCreate(async (snap,context)=>{
 
     const newValue = snap.data();
+    const tweet_id = newValue.id;
     const promt = newValue.text;
 
     // perform desired operations ...
     functions.logger.info('New data added to db');
-    functions.logger.info(snap.data());
+    functions.logger.info(promt);
 
 
     // publish message to pubsub function with promt data 
@@ -203,13 +217,12 @@ exports.callAPI = functions.firestore.document('tweets/{id}')
     const pubsub = new PubSub()
     await pubsub.topic('test-topic').publishMessage({
         json: { 
-            msg: 'the emulator sends its regards',
-            data: promt,
+            id: tweet_id,
+            text: promt
         },
     })
 
 });
-
 
 
 
@@ -219,6 +232,27 @@ exports.callAPI = functions.firestore.document('tweets/{id}')
 
 
 //Testing:
+exports.getAllData = functions.https.onRequest(async (request,response)=>{ 
+  //get all data from collection in database
+    const dbSnapshot = await dbRef2.get();
+    tweets = []
+
+    // map through results and call api with the text promts
+    dbSnapshot.docs.map(doc => 
+        {
+        //call api with doc.data().text
+        tweets.push(doc.data())
+        })
+
+    if (dbSnapshot !== undefined){
+        response.send(tweets);
+    } else{
+        response.send([]);
+    }
+
+});
+
+
 exports.test = functions.https.onRequest(async (request,response)=>{ 
     // add data to db 
     dbRef2.add(
@@ -226,18 +260,21 @@ exports.test = functions.https.onRequest(async (request,response)=>{
             id: "123456",
             text: "moving in the wind at 20000mph",
             replied: false,
+            openAiUrl: '',
+            sdUrl: '',
         }
     )
     response.send({msg:"For testing purposes"});
 });
 
 //replicate a succesful api call
-
 exports.successCall = functions.https.onRequest(async (request,response)=>{ 
     const data =  {
             id: "123456",
-            text: "moving in the wind at 20000mph",
+            text: "moving in the wind at 20000mph success call",
             replied: false,
+            openAiUrl: '',
+            sdUrl: '',
         }
     response.send(data);
 });
@@ -251,13 +288,11 @@ exports.failedCall = functions.https.onRequest(async (request,response)=>{
 
 
 //todo:
-//handle retry mechanism for pubsub
-//create a get all data from db function
-//still need to validate user is following 
-// update db data to include openAiUrl & sdUrl
+//handle retry mechanism for pubsub - handle when api is down 
+//call api passing in a callback url - this adds image data to db 
+//validate data meets criteria -  user is following, remove @ mention and validate text
 // store the image using tweet id:name somewhere when done - endpoint for AI apis
-//validate data meets criteria - user is following us and other stuff
 
-// cron job - 
+// cron job - for polling tweets
 // https://stackoverflow.com/questions/54323163/how-to-trigger-function-when-date-stored-in-firestore-database-is-todays-date
 //https://www.youtube.com/watch?v=h79xrJZAQ6I

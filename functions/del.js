@@ -33,27 +33,25 @@
 
 
 
-// ----4 - get all data from db collection
-  // //get all data from collection in database
-    // const dbSnapshot = await dbRef2.get();
-    // tweets = []
-
-    // //map through results and call api with the text promts
-    // dbSnapshot.docs.map(doc => 
-    //     {
-    //     //call api with doc.data().text
-    //     tweets.push(doc.data())
-    //     })
+// ----4 - old function triggered by the pub/sub event
+// functions.logger.info('Got a pubsub message');
+// const data = message.data ? await Buffer.from(message.data, 'base64').toString() : 'ERR'
+// // functions.logger.info({ data })
+// // functions.logger.info({ context })
 
 
+// // call text-to-art API's
+// const url1 = 'http://localhost:5001/gioconda-363212/us-central1/successCall'
+// const url2 = 'http://localhost:5001/gioconda-363212/us-central1/failedCall'
+// request(url1, function (error, response) {
+//     if (error) throw new Error(error);
+//     functions.logger.info("runing the job dawgggf");
+//     functions.logger.info(response.body);
+// }); 
 
+// functions.logger.info('Got a pubsub Task Completed');
 
-    // if (dbSnapshot !== undefined){
-    //     response.send(tweets);
-    // } else{
-    //     response.send([]);
-    // }
-    
+// return null // returns nothing
  
 
 // ----5
