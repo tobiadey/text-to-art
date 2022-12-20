@@ -191,6 +191,8 @@ exports.pubsubTriggeredFunction = functions.runWith({failurePolicy: true}).pubsu
           },
         'webhook_completed':'',
         'headers': {
+            'Authorization': process.env.REPLICATE_API_TOKEN,
+            'Content-Type': 'application/json',
         }
     };
 
@@ -287,6 +289,12 @@ exports.failedCall = functions.https.onRequest(async (request,response)=>{
 });
 
 
+
+// Blockers:
+// can't succesfully setup & test retry mechanism for function triggered by the pub/sub event
+// trying to figure out how to use replicate API in JS (expectation is python or curl)
+
+
 //todo:
 //handle retry mechanism for pubsub - handle when api is down 
 //call api passing in a callback url - this adds image data to db 
@@ -296,3 +304,6 @@ exports.failedCall = functions.https.onRequest(async (request,response)=>{
 // cron job - for polling tweets
 // https://stackoverflow.com/questions/54323163/how-to-trigger-function-when-date-stored-in-firestore-database-is-todays-date
 //https://www.youtube.com/watch?v=h79xrJZAQ6I
+
+// Replicate AI:
+// https://github.com/nicholascelestin/replicate-js
