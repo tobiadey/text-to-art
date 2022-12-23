@@ -83,3 +83,5 @@ Using pub/sub within your acrichteture, microservices dont need to know about ea
 
 If any microservce goes down pub/sub stores the message for 7 days/ until the microservice is back online/available.
 
+
+[Used Ngrox to forward http request. This is because firbase emulators dont use https(local testing)](https://stackoverflow.com/questions/61614571/how-to-run-firebase-functions-emulator-on-https-instead-of-http)
