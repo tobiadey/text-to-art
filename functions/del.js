@@ -5,7 +5,32 @@
 
 // ----1
 // 
+// var data = JSON.stringify(
+//   {
+//     "version":"6359a0cab3ca6e4d3320c33d79096161208e9024d174b2311e5a21b6c7e1131c",
+//     "input":
+//       {
+//         "prompt":"a photo of an astronaut riding a horse on mars"
+//       }
+//   });
 
+// var config = {
+//   method: 'post',
+//   url: 'https://api.replicate.com/v1/predictions',
+//   headers: { 
+//     'Authorization': 'Token $REPLICATE_API_TOKEN', 
+//     'Content-Type': 'application/json'
+//   },
+//   data : data
+// };
+
+// axios(config)
+// .then(function (response) {
+//   console.log(JSON.stringify(response.data));
+// })
+// .catch(function (error) {
+//   console.log(error);
+// });
 
 
 
