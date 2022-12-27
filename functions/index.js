@@ -148,6 +148,8 @@ exports.poll = functions.https.onRequest(async (request,response)=>{
                         sdUrl: '',
                     }
                 )
+
+                //sleep for 5 seconds
                 } 
             })
             // get the next 10 tweets using the next token (still insilde while loop)
@@ -164,73 +166,6 @@ exports.poll = functions.https.onRequest(async (request,response)=>{
 });
 
 
-
-
-// https://blog.minimacode.com/publish-message-to-pubsub-emulator/
-//function triggered by the pub/sub event
-//function retry mechanism - https://firebase.google.com/docs/functions/retries
-//MUST BE IDEMPOTENT
-// exports.pubsubTriggeredFunction = functions.pubsub.topic('test-topic').onPublish((message, context) => {
-exports.pubsubTriggeredFunction = functions.runWith({failurePolicy: true}).pubsub.topic('test-topic').onPublish(async (message, context) => {
-    functions.logger.info('Got a pubsub message');
-    //keep state - how?
-
-
-    const data = message.data ? await Buffer.from(message.data, 'base64').toString() : 'ERR'
-    if (data == 'ERR'){
-        return null
-    }
-    const tweet_id = message.json.id
-    const promt = message.json.text
-
-    // call text-to-art API's - replicate
-    // replicate api doc - https://replicate.com/docs/reference/http
-    // replicate sd model - https://replicate.com/stability-ai/stable-diffusion/api#run
-    var param_data = JSON.stringify(
-    {
-        "version":"6359a0cab3ca6e4d3320c33d79096161208e9024d174b2311e5a21b6c7e1131c",
-        "input":
-        {
-            "prompt":promt
-        },
-        "webhook_completed": process.env.SD_CALLBACK_URL
-    });
-
-    var config = {
-    method: 'post',
-    url: 'https://api.replicate.com/v1/predictions',
-    headers: { 
-        'Authorization': `Token ${process.env.REPLICATE_API_TOKEN}`, 
-        'Content-Type': 'application/json'
-    },
-    data : param_data
-    };
-
-    const res = await axios(config)
-    functions.logger.info(res.data);
-
-    if (res == undefined){
-        return null
-    }
-    functions.logger.info(tweet_id,promt)
-    const sd_id = res.data.id
-
-    const snapshot = await dbRef2.where('id', '==', tweet_id).get();
-    // functions.logger.info(tweet_id,promt)
-
-
-    if (!(snapshot.empty)) {
-    // update its value for sd_url to the sd_id (temporarily until url is ready)
-    snapshot.forEach(async (doc) => {
-        functions.logger.info(doc.id, ' => ', doc.data());
-        const temp_doc_ref = await dbRef2.doc(doc.id);
-        await temp_doc_ref.update({sdUrl: sd_id});
-      });
-    }
-
-    return null // return nothing
-})
-
 // STEP 4 - Trigger event (on addition to DB)- calling AI APIS with prompt text
 // https://firebase.google.com/docs/functions/firestore-events
 exports.callAPI = functions.firestore.document('tweets/{id}')
@@ -242,18 +177,55 @@ exports.callAPI = functions.firestore.document('tweets/{id}')
 
     // perform desired operations ...
     functions.logger.info('New data added to db');
+    functions.logger.info(tweet_id);
     functions.logger.info(promt);
 
-
-    // publish message to pubsub function with promt data 
-    // publishes a pub/sub event
-    const pubsub = new PubSub()
-    await pubsub.topic('test-topic').publishMessage({
-        json: { 
-            id: tweet_id,
-            text: promt
+    // call text-to-art API's - replicate
+    // replicate api doc - https://replicate.com/docs/reference/http
+    // replicate sd model - https://replicate.com/stability-ai/stable-diffusion/api#run
+    var param_data = JSON.stringify(
+        {
+            "version":"6359a0cab3ca6e4d3320c33d79096161208e9024d174b2311e5a21b6c7e1131c",
+            "input":
+            {
+                "prompt":promt
+            },
+            "webhook_completed": process.env.SD_CALLBACK_URL
+        });
+    
+        var config = {
+        method: 'post',
+        url: 'https://api.replicate.com/v1/predictions',
+        headers: { 
+            'Authorization': `Token ${process.env.REPLICATE_API_TOKEN}`, 
+            'Content-Type': 'application/json'
         },
-    })
+        data : param_data
+        };
+    
+        const res = await axios(config)
+        functions.logger.info(res.data);
+    
+        if (res == undefined){
+            return null
+        }
+        functions.logger.info(tweet_id,promt)
+        const sd_id = res.data.id
+    
+        const snapshot = await dbRef2.where('id', '==', tweet_id).get();
+        // functions.logger.info(tweet_id,promt)
+    
+    
+        if (!(snapshot.empty)) {
+        // update its value for sd_url to the sd_id (temporarily until url is ready)
+        snapshot.forEach(async (doc) => {
+            functions.logger.info(doc.id, ' => ', doc.data());
+            const temp_doc_ref = await dbRef2.doc(doc.id);
+            await temp_doc_ref.update({sdUrl: sd_id});
+          });
+        }
+    
+        return null // return nothing
 
 });
 
@@ -287,43 +259,42 @@ exports.sdCallback = functions.https.onRequest(async (request,response)=>{
     }
 
 
+
+    //tweet 
+
     response.send({msg:'finished'});
 });
-
-// STEP 6 - Use PubSub as Callback URL/Endpoint to recieve Image generated by DALLEE-2 - store image url in db
-
-// STEP 7 - Check both tweets have image urls then tweet as reply to original tweet reply & set completed = True
 
 
 
 //Testing:
-exports.getAllData = functions.https.onRequest(async (request,response)=>{ 
-  //get all data from collection in database
-    const dbSnapshot = await dbRef2.get();
-    tweets = []
+// exports.getAllData = functions.https.onRequest(async (request,response)=>{ 
+//   //get all data from collection in database
+//     const dbSnapshot = await dbRef2.get();
+//     tweets = []
 
-    // map through results and call api with the text promts
-    dbSnapshot.docs.map(doc => 
-        {
-        //call api with doc.data().text
-        tweets.push(doc.data())
-        })
+//     // map through results and call api with the text promts
+//     dbSnapshot.docs.map(doc => 
+//         {
+//         //call api with doc.data().text
+//         tweets.push(doc.data())
+//         })
 
-    if (dbSnapshot !== undefined){
-        response.send(tweets);
-    } else{
-        response.send([]);
-    }
+//     if (dbSnapshot !== undefined){
+//         response.send(tweets);
+//     } else{
+//         response.send([]);
+//     }
 
-});
+// });
 
 
 exports.test = functions.https.onRequest(async (request,response)=>{ 
     // add data to db 
     dbRef2.add(
         {
-            id: "123456789",
-            text: "moving in the wind at 20000mph",
+            id: "123",
+            text: "21 savage but a cartoon",
             replied: false,
             openAiUrl: '',
             sdUrl: '',
@@ -333,39 +304,19 @@ exports.test = functions.https.onRequest(async (request,response)=>{
     response.send({msg:"For testing purposes"});
 });
 
-//replicate a succesful api call
-// exports.successCall = functions.https.onRequest(async (request,response)=>{ 
-//     const data =  {
-//             id: "123456",
-//             text: "moving in the wind at 20000mph success call",
-//             replied: false,
-//             openAiUrl: '',
-//             sdUrl: '',
-//         }
-//     response.send(data);
-// });
-
-// //replicate a failed api call
-// exports.failedCall = functions.https.onRequest(async (request,response)=>{ 
-//     const data =  undefined
-
-//     response.status(503); //server down 
-// });
-
-
 
 // Blockers:
-// can't succesfully setup & test retry mechanism for function triggered by the pub/sub event
-
+// can't succesfully setup & test retry mechanism for function triggered by the pub/sub event - handle when api server is down. SQS type mechanism
 
 //todo:
-//handle retry mechanism for pubsub - handle when api is down 
-//validate data meets criteria -  user is following, remove @ mention and validate text
-// store the image using tweet id:name somewhere when done - endpoint for AI apis
+// cron job 
+// tweet with media 
+// remove @ mention and validate text
+//validate data meets criteria -  user is following, 
+//When adding Dalee2 in the future - Check both tweets have image urls before tweeting as reply to original tweet reply & set completed = True
+
 
 // cron job - for polling tweets
 // https://stackoverflow.com/questions/54323163/how-to-trigger-function-when-date-stored-in-firestore-database-is-todays-date
 //https://www.youtube.com/watch?v=h79xrJZAQ6I
 
-// Replicate AI:
-// https://github.com/nicholascelestin/replicate-js

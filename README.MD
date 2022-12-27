@@ -69,6 +69,7 @@ Idempotency
     - $ firebase serve 
     - $ firebase emulators:start
     - $ firebase deploy --only functions
+    - $ ./ngrok http 5001 (in dir w ngrok installed)
 
 ---
 
