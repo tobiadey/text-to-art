@@ -258,9 +258,25 @@ exports.sdCallback = functions.https.onRequest(async (request,response)=>{
       });
     }
 
+    //tweet image to twitter
+    const tweetText = 
+    `
+    🤖 Here's your AI-generated image!
 
+    Prompt: "PROMT_VAR"
+    `
 
-    //tweet 
+    const nextTweet = {
+        "text": tweetText, 
+        "media": 
+            {"media_ids": ["1455952740635586573"]}}
+
+    const { data } = await refreshedClient.v2.tweet(
+        nextTweet
+    );
+
+    // response.send(data);
+    functions.logger.info(`Tweeted data ${data}`);
 
     response.send({msg:'finished'});
 });
@@ -268,6 +284,40 @@ exports.sdCallback = functions.https.onRequest(async (request,response)=>{
 
 
 //Testing:
+exports.test = functions.https.onRequest(async (request,response)=>{ 
+    // add data to db 
+    dbRef2.add(
+        {
+            id: "123",
+            text: "21 savage but a cartoon",
+            replied: false,
+            openAiUrl: '',
+            sdUrl: '',
+        }
+    )
+
+    response.send({msg:"For testing purposes"});
+});
+
+
+// Blockers:
+// can't succesfully setup & test retry mechanism for function triggered by the pub/sub event - handle when api server is down. SQS type mechanism
+
+//todo:
+//set completed to true and check this before tweeting to make sure no duplciate replies/tweets
+// cron job 
+// tweet with media 
+// remove @ mention and validate text
+//validate data meets criteria -  user is following, 
+//When adding Dalee2 in the future - Check both tweets have image urls before tweeting as reply to original tweet reply & set completed = True
+
+
+// cron job - for polling tweets
+// https://stackoverflow.com/questions/54323163/how-to-trigger-function-when-date-stored-in-firestore-database-is-todays-date
+//https://www.youtube.com/watch?v=h79xrJZAQ6I
+
+
+// -------
 // exports.getAllData = functions.https.onRequest(async (request,response)=>{ 
 //   //get all data from collection in database
 //     const dbSnapshot = await dbRef2.get();
@@ -289,34 +339,22 @@ exports.sdCallback = functions.https.onRequest(async (request,response)=>{
 // });
 
 
-exports.test = functions.https.onRequest(async (request,response)=>{ 
-    // add data to db 
-    dbRef2.add(
-        {
-            id: "123",
-            text: "21 savage but a cartoon",
-            replied: false,
-            openAiUrl: '',
-            sdUrl: '',
-        }
-    )
 
-    response.send({msg:"For testing purposes"});
-});
+// exports.pollHourly = functions.pubsub
+//     .schedule("* * * * *") //every minute
+//     .onRun((context) =>{
+//         console.log("This new cron job is srating!");
+//         functions.logger.info("Hello logs!");
+//         const options = {
+//         'method': 'GET',
+//         'url': process.env.TWEET_FUNCTION_TRIGGER,
+//         'headers': {
+//         }
+//         };
+//         request(options, function (error, response) {
+//             if (error) throw new Error(error);
+//             console.log(response.body);
+//             });
 
-
-// Blockers:
-// can't succesfully setup & test retry mechanism for function triggered by the pub/sub event - handle when api server is down. SQS type mechanism
-
-//todo:
-// cron job 
-// tweet with media 
-// remove @ mention and validate text
-//validate data meets criteria -  user is following, 
-//When adding Dalee2 in the future - Check both tweets have image urls before tweeting as reply to original tweet reply & set completed = True
-
-
-// cron job - for polling tweets
-// https://stackoverflow.com/questions/54323163/how-to-trigger-function-when-date-stored-in-firestore-database-is-todays-date
-//https://www.youtube.com/watch?v=h79xrJZAQ6I
-
+//         return null;
+//     })
