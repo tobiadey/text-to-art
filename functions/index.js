@@ -10,48 +10,122 @@ const admin = require("firebase-admin");
 const { PubSub } = require("@google-cloud/pubsub");
 //import request to trigger the tweet at certain intervals (scheduled function call)
 const request = require('request');
-var axios = require('axios');
+const axios = require('axios');
+const fs = require('fs');
+const { Buffer } = require("buffer");
 require('dotenv').config()
 
 //reference to document in firestore db
 admin.initializeApp();
-const dbRef = admin.firestore().doc(process.env.DB_REFERENCE); // rename tokenRef
-const dbRef2 = admin.firestore().collection(process.env.DB_REFERENCE2); //rename tweetsRef
+const dbRef_token_v1 = admin.firestore().doc(process.env.DB_REFERENCE_AUTH1); 
+const dbRef_token_v2 = admin.firestore().doc(process.env.DB_REFERENCE_AUTH2); 
+const dbRef_tweets = admin.firestore().collection(process.env.DB_REFERENCE_TWEETS); 
+const callbackURL_v1 = process.env.CALLBACK_URL_V1
 const callbackURL = process.env.CALLBACK_URL
-// const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN
 
 //init twitter api (using OAuth 2.0)
 const TwitterApi = require("twitter-api-v2").default;
+const twitterClient_v1 = new TwitterApi({ 
+    appKey: process.env.API_KEY , 
+    appSecret: process.env.API_SECRET
+});
 const twitterClient = new TwitterApi({
     clientId: process.env.CLIENT_ID ,
     clientSecret: process.env.CLIENT_SECRET,
 }); 
 
 
-// STEP 1 - Auth URL
+// Authentication workflows for v1 & v2 twitterapi - https://github.com/PLhery/node-twitter-api-v2/blob/master/doc/auth.md#collect-temporary-access-tokens-and-get-persistent-tokens
+// Auth URL Twitter V1
 //generate authentication link
-exports.auth = functions.https.onRequest(async (request,response) => {
-    
+exports.auth1 = functions.https.onRequest(async (request,response) => {
+
+    const authLink = await twitterClient_v1.generateAuthLink(
+        callbackURL_v1,
+        { linkMode: 'authorize' }
+    );
+
+    // Use URL generated
+    const url = authLink.url;
+    const oauth_token = authLink.oauth_token
+    const oauth_token_secret = authLink.oauth_token_secret
+
+    // store verifier in db
+    await dbRef_token_v1.set({oauth_token,oauth_token_secret})
+
+    response.redirect(url); //redirect to twitter
+
+});
+
+// Auth URL Twitter V2
+//generate authentication link
+exports.auth2 = functions.https.onRequest(async (request,response) => {
     const {url, codeVerifier, state} = twitterClient.generateOAuth2AuthLink(
         callbackURL,
         {scope: ["tweet.read", "tweet.write","users.read","offline.access"]}
     );
-
     //store verifier in db
-    await dbRef.set({codeVerifier,state })
+    await dbRef_token_v2.set({codeVerifier,state})
 
     response.redirect(url); //redirect to twitter
 });
 
-// STEP 2 - Verify callback code, store access_token 
-// callback url
+// CALLBACK URL Twitter V1
+// Verify callback code, store access_token 
+exports.callbackv1 = functions.https.onRequest(async (request,response) => {
+
+    // Extract tokens from query string
+    const { oauth_token, oauth_verifier } = request.query;
+    // Get the saved oauth_token_secret from session
+    const{oauth_token_secret} = (await dbRef_token_v1.get()).data();
+
+
+    if (!oauth_token || !oauth_verifier || !oauth_token_secret) {
+        return response.status(400).send('You denied the app or your session expired!');
+    }
+
+    // Obtain the persistent tokens
+    // Create a client from temporary tokens
+    const twitterClient_v1 = new TwitterApi({
+        appKey: process.env.API_KEY,
+        appSecret: process.env.API_SECRET,
+        accessToken: oauth_token,
+        accessSecret: oauth_token_secret,
+      });
+
+    // loggedClient is an authenticated client on behalf of some user
+    const { 
+    client: loggedClient, 
+    accessToken, 
+    accessSecret } 
+    = await twitterClient_v1.login(oauth_verifier)
+
+
+    // Store accessToken & accessSecret somewhere
+    await dbRef_token_v1.set({v1_accessToken:accessToken,accessSecret})
+
+    client = await loggedClient.currentUser(); // start using the client if you want
+
+    functions.logger.info(loggedClient)
+    functions.logger.info(twitterClient_v1)
+
+
+
+    // loggedClient.v1.tweet("tweet from NodeJS")
+    // twitterClient_v1.tweet(("tweet from NodeJS"))
+
+    response.send({msg:"finished execution"});
+});
+
+// CALLBACK URL Twitter V2
+// Verify callback code, store access_token 
 exports.callback = functions.https.onRequest(async (request,response) => {
 
     //grab state & code form url (url params)
     const {state, code} = request.query;
 
     // compare the state & code variables above to that stored in db
-    const dbSnapshot = await dbRef.get();
+    const dbSnapshot = await dbRef_token_v2.get();
     const {codeVerifier, state:storedState} = dbSnapshot.data();
 
     if (state !== storedState) {
@@ -68,9 +142,9 @@ exports.callback = functions.https.onRequest(async (request,response) => {
         redirectUri: callbackURL,
     });
 
-    await dbRef.set({accessToken,refreshToken});
+    await dbRef_token_v2.set({accessToken,refreshToken});
 
-    const { data } = await loggedClient.v2.me(); // start using the client if you want
+    const data = await loggedClient.v2.me(); // start using the client if you want
 
     response.send(data);
 
@@ -84,7 +158,7 @@ exports.callback = functions.https.onRequest(async (request,response) => {
 exports.poll = functions.https.onRequest(async (request,response)=>{
 
     //refresh token to call twitter api with cron job 
-    const{refreshToken} = (await dbRef.get()).data();
+    const{refreshToken} = (await dbRef_token_v2.get()).data();
 
     const{
         client: refreshedClient,
@@ -92,7 +166,8 @@ exports.poll = functions.https.onRequest(async (request,response)=>{
         refreshToken: newRefreshToken,
     } = await twitterClient.refreshOAuth2Token(refreshToken);
 
-    await dbRef.set({accessToken,refreshToken:newRefreshToken});
+    // Store refreshed {accessToken} and {newRefreshToken} to replace the old ones
+    await dbRef_token_v2.set({accessToken,refreshToken:newRefreshToken});
 
 
     //search for tweets that meet certain criteria
@@ -105,17 +180,22 @@ exports.poll = functions.https.onRequest(async (request,response)=>{
             query: "in_reply_to_tweet_id:1603018284282138634 to:m1guelpf", 
             max_results: 10, 
         });
+    // functions.logger.info(res);
+    
+    if (res.data == undefined){
+        functions.logger.info("res is undefiend");
+        response.send({msg: "No data added as none meet search criteria"});
 
-    if (res.meta.next_token == undefined){
+    }else if (res.meta.next_token == undefined){
         functions.logger.info("next token is undefiend");
         res.data.map(async item => {
             // check if tweet id already exists in db
-            const snapshot = await dbRef2.where('id', '==', item.id).get();
+            const snapshot = await dbRef_tweets.where('id', '==', item.id).get();
             functions.logger.info('Taking snapshot.');
             if (snapshot.empty) {
             functions.logger.info('No matching documents.');
             // push to db
-            dbRef2.add(
+            dbRef_tweets.add(
                 {
                     id: item.id,
                     text: item.text,
@@ -126,6 +206,8 @@ exports.poll = functions.https.onRequest(async (request,response)=>{
             )
             } 
         })
+        response.send({msg: "Data polled and added to DB"});
+    
     }else{
         functions.logger.info("next token is defiend");
         // using the next token for polling - https://developer.twitter.com/en/docs/twitter-api/tweets/search/integrate/paginate
@@ -134,12 +216,12 @@ exports.poll = functions.https.onRequest(async (request,response)=>{
             res.data.map(async item => {
 
                 // check if tweet id already exists in db
-                const snapshot = await dbRef2.where('id', '==', item.id).get();
+                const snapshot = await dbRef_tweets.where('id', '==', item.id).get();
                 functions.logger.info('Taking snapshot.');
                 if (snapshot.empty) {
                 functions.logger.info('No matching documents.');
                 // push to db
-                dbRef2.add(
+                dbRef_tweets.add(
                     {
                         id: item.id,
                         text: item.text,
@@ -161,8 +243,8 @@ exports.poll = functions.https.onRequest(async (request,response)=>{
                 });
 
         }
+        response.send({msg: "Data polled and added to DB"});
     }
-    response.send({msg: "Data polled and added to DB"});
 });
 
 
@@ -212,7 +294,7 @@ exports.callAPI = functions.firestore.document('tweets/{id}')
         functions.logger.info(tweet_id,promt)
         const sd_id = res.data.id
     
-        const snapshot = await dbRef2.where('id', '==', tweet_id).get();
+        const snapshot = await dbRef_tweets.where('id', '==', tweet_id).get();
         // functions.logger.info(tweet_id,promt)
     
     
@@ -220,7 +302,7 @@ exports.callAPI = functions.firestore.document('tweets/{id}')
         // update its value for sd_url to the sd_id (temporarily until url is ready)
         snapshot.forEach(async (doc) => {
             functions.logger.info(doc.id, ' => ', doc.data());
-            const temp_doc_ref = await dbRef2.doc(doc.id);
+            const temp_doc_ref = await dbRef_tweets.doc(doc.id);
             await temp_doc_ref.update({sdUrl: sd_id});
           });
         }
@@ -245,7 +327,7 @@ exports.sdCallback = functions.https.onRequest(async (request,response)=>{
 
 
     //query stored id in db in place or sd url & replace with img url
-    const snapshot = await dbRef2.where('sdUrl', '==', sd_id).get();
+    const snapshot = await dbRef_tweets.where('sdUrl', '==', sd_id).get();
     // functions.logger.info(sd_id,sd_url)
 
 
@@ -253,7 +335,7 @@ exports.sdCallback = functions.https.onRequest(async (request,response)=>{
     // update its value for sd_url to the sd_url (url is ready)
     snapshot.forEach(async (doc) => {
         functions.logger.info(doc.id, ' => ', doc.data());
-        const temp_doc_ref = await dbRef2.doc(doc.id);
+        const temp_doc_ref = await dbRef_tweets.doc(doc.id);
         await temp_doc_ref.update({sdUrl: sd_url});
       });
     }
@@ -283,21 +365,69 @@ exports.sdCallback = functions.https.onRequest(async (request,response)=>{
 
 
 
-//Testing:
-exports.test = functions.https.onRequest(async (request,response)=>{ 
-    // add data to db 
-    dbRef2.add(
-        {
-            id: "123",
-            text: "21 savage but a cartoon",
-            replied: false,
-            openAiUrl: '',
-            sdUrl: '',
-        }
-    )
 
-    response.send({msg:"For testing purposes"});
-});
+//Testing:
+// https://github.com/PLhery/node-twitter-api-v2/blob/master/doc/examples.md
+exports.test = functions.https.onRequest(async (request,response)=>{ 
+
+    //client for v1
+    const{v1_accessToken,accessSecret} = (await dbRef_token_v1.get()).data();
+
+    const client = new TwitterApi({
+        appKey: process.env.API_KEY,
+        appSecret: process.env.API_SECRET,
+        accessToken: v1_accessToken,
+        accessSecret: accessSecret,
+      });
+
+    //refresh v2 tokens to create new client
+    //refresh token to call twitter api with cron job 
+    const{refreshToken} = (await dbRef_token_v2.get()).data();
+
+    const{
+        client: refreshedClient,
+        accessToken,
+        refreshToken: newRefreshToken,
+    } = await twitterClient.refreshOAuth2Token(refreshToken);
+
+    // Store refreshed {accessToken} and {newRefreshToken} to replace the old ones
+    await dbRef_token_v2.set({accessToken,refreshToken:newRefreshToken});
+
+
+
+    const url = 'https://replicate.delivery/pbxt/YRk1vWdWAl5IJdCh4vhANlFCNflFaVFUEfoC5yMpOF0sG3MQA/out-0.png'
+    const imageResponse = await axios.get(url, {responseType: "arraybuffer"})
+    const base64image = await new Buffer.from(imageResponse.data);
+    // Through a Buffer
+    const mediaId = await client.v1.uploadMedia(base64image, { mimeType:'png' });
+    functions.logger.info(mediaId)
+    
+    const tweetText = 
+    `
+    🤖 Here's your AI-generated image!
+
+    Prompt: "PROMT_VAR"
+    `
+
+    const nextTweet = {
+        "text": tweetText, 
+        media: 
+        { media_ids: [mediaId] }, 
+    }
+    
+
+    const { data } = await refreshedClient.v2.tweet(
+        nextTweet
+    );
+
+    response.send({msg:'finished'});
+
+  });
+  
+
+  
+
+
 
 
 // Blockers:
@@ -358,3 +488,124 @@ exports.test = functions.https.onRequest(async (request,response)=>{
 
 //         return null;
 //     })
+
+
+
+
+// Upload the image to Twitter
+// client.post('media/upload', {
+//   media: imageData,
+// }, (err, data, response) => {
+//   if (err) {
+//     console.log(err);
+//   } else {
+//     // Get the media ID of the uploaded image
+//     const mediaId = data.media_id_string;
+
+//     // Post a tweet reply with the media ID
+//     client.post('statuses/update', {
+//       status: 'Hello, world! This is my first tweet reply with media 📸',
+//       media_ids: mediaId,
+//       in_reply_to_status_id: '[TWEET_ID_TO_REPLY_TO]',
+//     }, (err, data, response) => {
+//       if (err) {
+//         console.log(err);
+
+
+    // add data to db 
+    // dbRef2.add(
+    //     {
+    //         id: "123",
+    //         text: "21 savage but a cartoon",
+    //         replied: false,
+    //         openAiUrl: '',
+    //         sdUrl: '',
+    //     }
+    // )
+
+
+// Proof i need v1 to upload img 
+// https://twittercommunity.com/t/how-to-show-an-image-in-a-v2-api-tweet/163169
+// https://twittercommunity.com/t/post-tweet-media-upload-in-v2/148590/16
+
+
+// V1/V2 Github docs
+// https://github.com/PLhery/node-twitter-api-v2
+// https://github.com/PLhery/node-twitter-api-v2/blob/master/doc/examples.md
+// https://github.com/PLhery/node-twitter-api-v2/blob/master/doc/examples.md#Withusercredentialsactasaloggeduser
+// https://github.com/PLhery/node-twitter-api-v2/blob/master/doc/auth.md#collect-temporary-access-tokens-and-get-persistent-tokens
+
+
+
+// ---
+
+  // //refresh v1 tokens to call twitter api
+   
+    // const mediaId = await client.v1.uploadMedia('/Users/tobiadewunmi/Desktop/Gioconda/functions/src/test.png');
+    // const mediaId = await v1Client.v1.uploadMedia('./src/test.png');
+
+    // // Read the image from url and turn into a base64 image 
+    // const url = 'https://replicate.delivery/pbxt/YRk1vWdWAl5IJdCh4vhANlFCNflFaVFUEfoC5yMpOF0sG3MQA/out-0.png'
+    // const url2 = '/Users/tobiadewunmi/Desktop/Gioconda/functions/src/test.png'
+    // // const imageResponse = await axios.get(url, {responseType: "arraybuffer"})
+    // // const base64image = new Buffer.from(imageResponse.data).toString('base64');
+    // // const rawBinImage = imageResponse.data;
+    // // functions.logger.info(base64image);
+    // // functions.logger.info(rawBinImage);
+
+    // // //i already have elevated access
+    // // //buid an auth1 workflow and all this client call the v1 endpoints 
+    // // //rename the different clinets to v1 or v2 and implemtnet db docs to store their refresh tokens
+    // // uploadClient.v1.tweet('twitter-api-v2 is awesome!');
+    
+
+    // const{accessToken,accessSecret} = (await dbRef_token_v1.get()).data();
+
+    // const client = new TwitterApi({
+    //     appKey: process.env.API_KEY,
+    //     appSecret: process.env.API_SECRET,
+    //     accessToken: accessToken,
+    //     accessSecret: accessSecret,
+    //   });
+
+    
+    // // await client.v1.tweet('Hello, this is a test.');
+
+    // // You can upload media easily!
+    // // const upload_res = await client.v1.uploadMedia({file:rawBinImage,type:'png'});
+    // const upload_res = await client.v1.uploadMedia(url2);
+
+    // // upload_res = await client.post('media/upload', 
+    // // { 
+    // //     media_data: base64image
+    // // }, 
+    // // (error, media, response)=> {
+    // //     if (!error){
+    // //         functions.logger.info("working");
+    // //         functions.logger.info(media);
+
+    // //     }else{
+    // //         functions.logger.info("error");
+    // //         functions.logger.error(error);
+    // //         functions.logger.error(response);
+
+    // //     }
+
+    // // });
+
+    // client.v1.get('account/verify_credentials', {}, function(error, data, response) {
+    //     if (!error){
+    //         functions.logger.info("working");
+    //         functions.logger.info(data);
+
+    //     }else{
+    //         functions.logger.info("error");
+    //         functions.logger.error(error);
+    //         functions.logger.error(response);
+
+    //     }
+    //   });
+
+    // // functions.logger.info(upload_res)
+
+    // response.send({msg:'finished'});
