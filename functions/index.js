@@ -103,16 +103,8 @@ exports.callbackv1 = functions.https.onRequest(async (request,response) => {
 
     // Store accessToken & accessSecret somewhere
     await dbRef_token_v1.set({v1_accessToken:accessToken,accessSecret})
-
     client = await loggedClient.currentUser(); // start using the client if you want
 
-    functions.logger.info(loggedClient)
-    functions.logger.info(twitterClient_v1)
-
-
-
-    // loggedClient.v1.tweet("tweet from NodeJS")
-    // twitterClient_v1.tweet(("tweet from NodeJS"))
 
     response.send({msg:"finished execution"});
 });
@@ -150,7 +142,7 @@ exports.callback = functions.https.onRequest(async (request,response) => {
 
 });
 
-// STEP 3 - Refresh tokens, poll tweets and add to db if not exisit using tweet id
+// Refresh tokens, poll tweets and add to db if not exisit using tweet id
 // add invididual tweet to db just like how its added to list of tweets
 // change structure to only store tweet id and data 
 // before adding check if tweet id exists 
@@ -175,9 +167,13 @@ exports.poll = functions.https.onRequest(async (request,response)=>{
     // API SEARCH TWEET https://developer.twitter.com/en/docs/twitter-api/tweets/search/api-reference/get-tweets-search-recent
     // BUILD QUERY - https://developer.twitter.com/en/docs/twitter-api/tweets/search/integrate/build-a-query#examples
     // var res =  await refreshedClient.v2.search("in_reply_to_tweet_id:1603018284282138634 to:m1guelpf")
+   
+    const tweet_id = 1609870460396634112
+    const author = adey_of
     var res = await refreshedClient.v2.get('tweets/search/recent', 
         { 
-            query: "in_reply_to_tweet_id:1603018284282138634 to:m1guelpf", 
+            // query: "in_reply_to_tweet_id:1603018284282138634 to:m1guelpf", 
+            query: `in_reply_to_tweet_id:${tweet_id} to:${author}`, 
             max_results: 10, 
         });
     // functions.logger.info(res);
@@ -237,7 +233,8 @@ exports.poll = functions.https.onRequest(async (request,response)=>{
             // get the next 10 tweets using the next token (still insilde while loop)
             res = await refreshedClient.v2.get('tweets/search/recent', 
                 { 
-                    query: "in_reply_to_tweet_id:1603018284282138634 to:m1guelpf", 
+                    // query: "in_reply_to_tweet_id:1603018284282138634 to:m1guelpf", 
+                    query: `in_reply_to_tweet_id:${tweet_id} to:${author}`, 
                     max_results: 10,
                     next_token: res.meta.next_token,    
                 });
@@ -317,7 +314,7 @@ exports.callAPI = functions.firestore.document('tweets/{id}')
 // Callback url from replicate, made posisble by using NGROX to create a https endpoint that forwards to this one 
 // https://stackoverflow.com/questions/61614571/how-to-run-firebase-functions-emulator-on-https-instead-of-http
 exports.sdCallback = functions.https.onRequest(async (request,response)=>{ 
-    functions.logger.info("Finished prediction succesfully useing webhook");
+    functions.logger.info("Finished prediction succesfully using webhook");
     // functions.logger.info(request.body);
     functions.logger.info(request.body.id);
     functions.logger.info(request.body.output[0]);
@@ -330,36 +327,87 @@ exports.sdCallback = functions.https.onRequest(async (request,response)=>{
     const snapshot = await dbRef_tweets.where('sdUrl', '==', sd_id).get();
     // functions.logger.info(sd_id,sd_url)
 
-
+    var in_reply_to_tweet_id = undefined
+    var promt_text = undefined
     if (!(snapshot.empty)) {
     // update its value for sd_url to the sd_url (url is ready)
     snapshot.forEach(async (doc) => {
         functions.logger.info(doc.id, ' => ', doc.data());
+        functions.logger.info(doc.data().id);
+        in_reply_to_tweet_id = doc.data().id;
+        promt_text = doc.data().text;
         const temp_doc_ref = await dbRef_tweets.doc(doc.id);
         await temp_doc_ref.update({sdUrl: sd_url});
       });
     }
 
-    //tweet image to twitter
+    functions.logger.info(in_reply_to_tweet_id);
+    functions.logger.info(promt_text);
+
+    
+    //upload image to twitter 
+    //client for v1
+    const{v1_accessToken,accessSecret} = (await dbRef_token_v1.get()).data();
+
+    const client = new TwitterApi({
+        appKey: process.env.API_KEY,
+        appSecret: process.env.API_SECRET,
+        accessToken: v1_accessToken,
+        accessSecret: accessSecret,
+        });
+    
+    //refresh v2 tokens to create new client
+    //refresh token to call twitter api with cron job 
+    const{refreshToken} = (await dbRef_token_v2.get()).data();
+
+    const{
+        client: refreshedClient,
+        accessToken,
+        refreshToken: newRefreshToken,
+    } = await twitterClient.refreshOAuth2Token(refreshToken);
+
+    // Store refreshed {accessToken} and {newRefreshToken} to replace the old ones
+    await dbRef_token_v2.set({accessToken,refreshToken:newRefreshToken});
+
+    
+    // const url = 'https://replicate.delivery/pbxt/YRk1vWdWAl5IJdCh4vhANlFCNflFaVFUEfoC5yMpOF0sG3MQA/out-0.png'
+    const url = sd_url
+    const imageResponse = await axios.get(url, {responseType: "arraybuffer"})
+    const base64image = await new Buffer.from(imageResponse.data);
+    // Through a Buffer
+    const mediaId = await client.v1.uploadMedia(base64image, { mimeType:'png' });
+    functions.logger.info(mediaId)
+    
     const tweetText = 
     `
     🤖 Here's your AI-generated image!
-
-    Prompt: "PROMT_VAR"
+    
+    Prompt: ${promt_text}
     `
+
+    // const nextTweet = {
+    //     "text": tweetText, 
+    //     media: 
+    //     { media_ids: [mediaId] }, 
+    //     reply:
+    //     {in_reply_to_tweet_id: '1609870460396634112'},
+        
+    // }
 
     const nextTweet = {
         "text": tweetText, 
-        "media": 
-            {"media_ids": ["1455952740635586573"]}}
+        media: 
+        { media_ids: [mediaId] }, 
+        reply:
+        {in_reply_to_tweet_id: in_reply_to_tweet_id},
+        
+    }
 
     const { data } = await refreshedClient.v2.tweet(
         nextTweet
     );
 
-    // response.send(data);
-    functions.logger.info(`Tweeted data ${data}`);
-
+    //tweet reply with image as media
     response.send({msg:'finished'});
 });
 
@@ -413,6 +461,9 @@ exports.test = functions.https.onRequest(async (request,response)=>{
         "text": tweetText, 
         media: 
         { media_ids: [mediaId] }, 
+        reply:
+        {in_reply_to_tweet_id: '1609870460396634112'},
+        
     }
     
 
@@ -425,12 +476,30 @@ exports.test = functions.https.onRequest(async (request,response)=>{
   });
   
 
-  
+const dbRef_ends = admin.firestore().collection(process.env.DB_REFERENCE_ENDS); 
+exports.test2 = functions.https.onRequest(async (request,response)=>{ 
+//   add data to db 
 
+// "21 savage but a cartoon"
+    const title = 'new-tweet-one'
+    dbRef_tweets.doc(title).set(
+        {
+            id: '1609870893773213698',
+            text: "portrait photo of a asia old warrior chief, tribal panther make up, blue on red, side profile",
+            replied: false,
+            openAiUrl: '',
+            sdUrl: '',
+        }
+    )
+
+    response.send({msg:'finished'});
+
+});
 
 
 
 // Blockers:
+//make sure id is text!!
 // can't succesfully setup & test retry mechanism for function triggered by the pub/sub event - handle when api server is down. SQS type mechanism
 
 //todo:
