@@ -168,8 +168,8 @@ exports.poll = functions.https.onRequest(async (request,response)=>{
     // BUILD QUERY - https://developer.twitter.com/en/docs/twitter-api/tweets/search/integrate/build-a-query#examples
     // var res =  await refreshedClient.v2.search("in_reply_to_tweet_id:1603018284282138634 to:m1guelpf")
    
-    const tweet_id = 1609870460396634112
-    const author = adey_of
+    const tweet_id = "1609870460396634112"
+    const author = "adey_of"
     var res = await refreshedClient.v2.get('tweets/search/recent', 
         { 
             // query: "in_reply_to_tweet_id:1603018284282138634 to:m1guelpf", 
