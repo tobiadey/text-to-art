@@ -497,8 +497,8 @@ exports.test2 = functions.https.onRequest(async (request,response)=>{
 });
 
 
-
 // Blockers:
+// how to remove twitter handle from string using regex in javascript
 //make sure id is text!!
 // can't succesfully setup & test retry mechanism for function triggered by the pub/sub event - handle when api server is down. SQS type mechanism
 
@@ -678,3 +678,25 @@ exports.test2 = functions.https.onRequest(async (request,response)=>{
     // // functions.logger.info(upload_res)
 
     // response.send({msg:'finished'});
+
+
+
+
+
+// To remove a Twitter handle from a text string in JavaScript, 
+// you can use a regular expression to search for the pattern of a Twitter handle and replace it 
+// with an empty string.
+
+// function removeTwitterHandle(text) {
+//     return text.replace(/@\w+/g, "");
+//   }
+    
+//   let text = "Hey @twitteruser, check out this tweet!";
+//   let updatedText = removeTwitterHandle(text);
+//   console.log(updatedText);  // Output: "Hey , check out this tweet!"
+
+// The regular expression /@\w+/g searches for a string that starts with an @ symbol, 
+// followed by one or more word characters (alphanumeric characters and underscores). 
+// The g flag indicates that the search should be performed globally, 
+// meaning that all occurrences of the pattern should be replaced. 
+// The replace() function then replaces the matched pattern with an empty string.
