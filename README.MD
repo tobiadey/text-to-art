@@ -89,9 +89,15 @@ If any microservce goes down pub/sub stores the message for 7 days/ until the mi
 
 ---
 
-Pub sub is not needed, why?:
+## Pub sub is not needed, why?:
 Pubsub is more like SNS than SQS therefore for GCP the equiv of SQS is cloud Tasks!
 
-Persistence
-SQS : Messages are persisted for some duration is no consumer available. The retention period value is from 1 minute to 14 days. The default is 4 days.
-SNS : No persistence. Whichever consumer is present at the time of message arrival, get the message and the message is deleted. If no consumers available then the message is lost.
+### Persistence
+- SQS : Messages are persisted for some duration is no consumer available. The retention period value is from 1 minute to 14 days. The default is 4 days.
+- SNS : No persistence. Whichever consumer is present at the time of message arrival, get the message and the message is deleted. If no consumers available then the message is lost.
+
+Choose SQS if:
+
+- You need a simple queue with no particular additional requirements.
+- Decoupling two applications and allowing parallel asynchronous processing.
+- Only one subscriber is needed.
